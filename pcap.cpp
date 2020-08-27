@@ -18,6 +18,11 @@ using namespace std;
 
 #pragma pack(pop)
 
+void usage(void)
+{
+    fprintf(stderr, "Usage: <pcap filename>\n");
+    exit(2);
+}
 char *get_isp(char *ip)
 {
     FILE *fp;
@@ -26,6 +31,10 @@ char *get_isp(char *ip)
     char curl[1024] = "curl ip-api.com/json/";
 
     strncat(curl, ip, 15);
+
+    char trash[1024] = " 2>/dev/null";
+
+    strncat(curl, trash, 15);
 
     fp = popen(curl, "r");
 
@@ -65,25 +74,63 @@ char *get_isp(char *ip)
     return result;
 }
 
-typedef struct abc
+typedef struct info
 {
     int cnt;
     char isp[1024];
-} abc;
+} info;
 
 int main(int argc, char *argv[])
 {
-
+    if(argc != 2)
+    {
+        fprintf(stderr, "Usage: <pcap filename>\n");
+        exit(2);
+    }
+        
     char errbuf[PCAP_ERRBUF_SIZE];
 
-    pcap_t *handle = pcap_open_offline("nono.pcap", errbuf);
+    pcap_t *handle = pcap_open_offline(argv[1], errbuf);
 
     struct in_addr student_ip;
     struct in_addr cau_ip;
     //    struct in_addr gw_ip;
 
-    inet_aton(argv[1], &student_ip);
+    //    inet_aton(argv[1], &student_ip);
     inet_aton("211.252.81.120", &cau_ip);
+
+    while (1)
+    {
+        struct pcap_pkthdr *header;
+        const uint8_t *packet;
+        int res = pcap_next_ex(handle, &header, &packet);
+
+        if (res == 0)
+            continue;
+        if (res == -1 || res == -2)
+            break;
+
+        struct ether_header *eth = (struct ether_header *)(packet);
+
+        if (eth->ether_type != htons(ETHERTYPE_IP))
+            continue;
+
+        const struct ip *ip = (struct ip *)(packet + ETHER_HDR_LEN);
+
+        if (memcmp(&ip->ip_src, &cau_ip, 4) == 0)
+        {
+            memcpy(&student_ip, &ip->ip_dst, 4);
+            break;
+        }
+        else if (memcmp(&ip->ip_dst, &cau_ip, 4) == 0)
+        {
+            memcpy(&student_ip, &ip->ip_src, 4);
+            break;
+        }
+        else
+            continue;
+    }
+
     //    inet_aton("172.30.1.1", &gw_ip);
 
     char ip_str[BUF_SIZE] = {0};
@@ -91,7 +138,7 @@ int main(int argc, char *argv[])
 
     uint32_t key;
 
-    map<uint32_t, abc> info;
+    map<uint32_t, info> map_info;
 
     while (1)
     {
@@ -115,8 +162,8 @@ int main(int argc, char *argv[])
         if (memcmp(&ip->ip_src, &ip->ip_dst, 4) == 0)
             continue;
 
-        if ((memcmp(&ip->ip_src, &cau_ip, 4) == 0) || (memcmp(&ip->ip_dst, &cau_ip, 4) == 0))
-            continue;
+        // if ((memcmp(&ip->ip_src, &cau_ip, 4) == 0) || (memcmp(&ip->ip_dst, &cau_ip, 4) == 0))
+        //     continue;
 
         if (memcmp(&ip->ip_src, &student_ip, 4) == 0)
         {
@@ -130,37 +177,43 @@ int main(int argc, char *argv[])
         // if (memcmp(&key, &gw_ip, 4) == 0)
         //     continue;
 
-        if (info.find(key) == info.end())
+        if (map_info.find(key) == map_info.end())
         {
-            info[key].cnt = 1;
+            map_info[key].cnt = 1;
             char *t1 = inet_ntoa(*(struct in_addr *)(&key));
             char *t2 = get_isp(t1);
 
             if (t2 == NULL)
             {
-                printf("NULL!\n");
-                memcpy(info[key].isp,"NULL",5);
+                //                printf("NULL!\n");
+                memcpy(map_info[key].isp, "NULL", 5);
             }
             else
             {
-                printf("isp = %s\n", t2);
-                memcpy(info[key].isp, t2, strlen(t2));
+                //                printf("isp = %s\n", t2);
+                memcpy(map_info[key].isp, t2, strlen(t2));
             }
-
-            printf("hello\n");
         }
         else
         {
-            info[key].cnt++;
+            map_info[key].cnt++;
         }
     }
 
+    char * file_name = (char *)malloc(sizeof(char) * strlen(argv[1]) + 1);
+    memcpy(file_name, argv[1], strlen(argv[1]));
+
+    strtok(file_name, ".");
+    strncat(file_name, ".csv", 4);
+    file_name[strlen(file_name)] = '\0';
+
     FILE *f = NULL;
-    f = fopen("result.csv", "w");
+    
+    f = fopen(file_name, "w");
 
     fprintf(f, "ip address, isp, cnt (total = %d)\n", cnt - 1);
 
-    for (map<uint32_t, abc>::iterator it = info.begin(); it != info.end(); it++)
+    for (map<uint32_t, info>::iterator it = map_info.begin(); it != map_info.end(); it++)
     {
         fprintf(f, "%s,%s,%d\n", inet_ntoa(*(struct in_addr *)(&it->first)),
                 it->second.isp, it->second.cnt);
@@ -169,5 +222,8 @@ int main(int argc, char *argv[])
     pcap_close(handle);
 
     fclose(f);
+
+    printf("Finish\n");
+
     return 0;
 }
