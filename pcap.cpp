@@ -25,6 +25,7 @@ void usage(void)
     fprintf(stderr, "Usage: <pcap filename>\n");
     exit(2);
 }
+
 char *get_isp(char *ip)
 {
     FILE *fp;
@@ -82,8 +83,7 @@ typedef struct info
     char isp[1024];
 } info;
 
-
-void analysis_pcap(string & s_pcap_name)
+void analysis_pcap(string &s_pcap_name)
 {
     char errbuf[PCAP_ERRBUF_SIZE];
     char pcap_name[1024];
@@ -91,8 +91,6 @@ void analysis_pcap(string & s_pcap_name)
     memcpy(pcap_name, s_pcap_name.c_str(), strlen(s_pcap_name.c_str()));
 
     pcap_t *handle = pcap_open_offline(pcap_name, errbuf);
-
-
 
     struct in_addr student_ip;
     struct in_addr cau_ip;
@@ -193,7 +191,6 @@ void analysis_pcap(string & s_pcap_name)
     char *file_name = (char *)malloc(sizeof(char) * strlen(pcap_name) + 1);
     memcpy(file_name, pcap_name, strlen(pcap_name));
 
-
     strtok(file_name, ".");
     strncat(file_name, ".csv", 4);
     file_name[strlen(file_name)] = '\0';
@@ -216,8 +213,6 @@ void analysis_pcap(string & s_pcap_name)
 
     printf("%s Finish\n", pcap_name);
 }
-
-
 
 int main(int argc, char *argv[])
 {
@@ -246,14 +241,13 @@ int main(int argc, char *argv[])
         if (dir->d_ino == 0)
             continue;
 
-        v.push_back(dir->d_name);
+        if (!(strncmp(dir->d_name + strlen(dir->d_name) - 5, ".pcap", 5)))
+        {
+            v.push_back(dir->d_name);
+        }
     }
 
     closedir(dp);
-
-    iter = v.begin();
-
-    v.erase(iter, iter + 2);
 
     for (iter = v.begin(); iter != v.end(); iter++)
     {
