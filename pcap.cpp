@@ -9,6 +9,8 @@
 #include <string.h>
 #include <iostream>
 #include <map>
+#include <dirent.h>
+#include <vector>
 
 #define BUF_SIZE 1024
 
@@ -80,23 +82,21 @@ typedef struct info
     char isp[1024];
 } info;
 
-int main(int argc, char *argv[])
-{
-    if(argc != 2)
-    {
-        fprintf(stderr, "Usage: <pcap filename>\n");
-        exit(2);
-    }
-        
-    char errbuf[PCAP_ERRBUF_SIZE];
 
-    pcap_t *handle = pcap_open_offline(argv[1], errbuf);
+void analysis_pcap(string & s_pcap_name)
+{
+    char errbuf[PCAP_ERRBUF_SIZE];
+    char pcap_name[1024];
+
+    memcpy(pcap_name, s_pcap_name.c_str(), strlen(s_pcap_name.c_str()));
+
+    pcap_t *handle = pcap_open_offline(pcap_name, errbuf);
+
+
 
     struct in_addr student_ip;
     struct in_addr cau_ip;
-    //    struct in_addr gw_ip;
 
-    //    inet_aton(argv[1], &student_ip);
     inet_aton("211.252.81.120", &cau_ip);
 
     while (1)
@@ -131,8 +131,6 @@ int main(int argc, char *argv[])
             continue;
     }
 
-    //    inet_aton("172.30.1.1", &gw_ip);
-
     char ip_str[BUF_SIZE] = {0};
     int cnt = 0;
 
@@ -162,9 +160,6 @@ int main(int argc, char *argv[])
         if (memcmp(&ip->ip_src, &ip->ip_dst, 4) == 0)
             continue;
 
-        // if ((memcmp(&ip->ip_src, &cau_ip, 4) == 0) || (memcmp(&ip->ip_dst, &cau_ip, 4) == 0))
-        //     continue;
-
         if (memcmp(&ip->ip_src, &student_ip, 4) == 0)
         {
             memcpy(&key, &ip->ip_dst, 4);
@@ -174,9 +169,6 @@ int main(int argc, char *argv[])
             memcpy(&key, &ip->ip_src, 4);
         }
 
-        // if (memcmp(&key, &gw_ip, 4) == 0)
-        //     continue;
-
         if (map_info.find(key) == map_info.end())
         {
             map_info[key].cnt = 1;
@@ -185,12 +177,10 @@ int main(int argc, char *argv[])
 
             if (t2 == NULL)
             {
-                //                printf("NULL!\n");
                 memcpy(map_info[key].isp, "NULL", 5);
             }
             else
             {
-                //                printf("isp = %s\n", t2);
                 memcpy(map_info[key].isp, t2, strlen(t2));
             }
         }
@@ -200,15 +190,16 @@ int main(int argc, char *argv[])
         }
     }
 
-    char * file_name = (char *)malloc(sizeof(char) * strlen(argv[1]) + 1);
-    memcpy(file_name, argv[1], strlen(argv[1]));
+    char *file_name = (char *)malloc(sizeof(char) * strlen(pcap_name) + 1);
+    memcpy(file_name, pcap_name, strlen(pcap_name));
+
 
     strtok(file_name, ".");
     strncat(file_name, ".csv", 4);
     file_name[strlen(file_name)] = '\0';
 
     FILE *f = NULL;
-    
+
     f = fopen(file_name, "w");
 
     fprintf(f, "ip address, isp, cnt (total = %d)\n", cnt - 1);
@@ -223,7 +214,54 @@ int main(int argc, char *argv[])
 
     fclose(f);
 
-    printf("Finish\n");
+    printf("%s Finish\n", pcap_name);
+}
+
+
+
+int main(int argc, char *argv[])
+{
+    if (argc != 2)
+    {
+        fprintf(stderr, "Usage: <pcap directory name>\n");
+        exit(2);
+    }
+
+    DIR *dp;
+    struct dirent *dir;
+    std::vector<std::string> v;
+    std::vector<std::string>::iterator iter;
+
+    char path[1024] = "./";
+    strncat(path, argv[1], strlen(argv[1]) + 1);
+
+    if ((dp = opendir(path)) == NULL)
+    {
+        fprintf(stderr, "%s is not exist path\n", path);
+        exit(-1);
+    }
+
+    while ((dir = readdir(dp)) != NULL)
+    {
+        if (dir->d_ino == 0)
+            continue;
+
+        v.push_back(dir->d_name);
+    }
+
+    closedir(dp);
+
+    iter = v.begin();
+
+    v.erase(iter, iter + 2);
+
+    for (iter = v.begin(); iter != v.end(); iter++)
+    {
+        string pcap_name(path);
+        pcap_name += "/";
+        pcap_name += *iter;
+        analysis_pcap(pcap_name);
+    }
 
     return 0;
 }
