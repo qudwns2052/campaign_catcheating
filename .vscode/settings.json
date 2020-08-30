@@ -3,6 +3,7 @@
         "map": "cpp",
         "string": "cpp",
         "iosfwd": "cpp",
-        "vector": "cpp"
+        "vector": "cpp",
+        "utility": "cpp"
     }
 }

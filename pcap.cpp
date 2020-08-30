@@ -11,6 +11,7 @@
 #include <map>
 #include <dirent.h>
 #include <vector>
+#include <sys/stat.h>
 
 #define BUF_SIZE 1024
 
@@ -81,14 +82,19 @@ typedef struct info
 {
     int cnt;
     char isp[1024];
+    std::vector<std::string> timestamp;
+
 } info;
 
-void analysis_pcap(string &s_pcap_name)
+void analysis_pcap(string &s_path)
 {
     char errbuf[PCAP_ERRBUF_SIZE];
-    char pcap_name[1024];
+    char pcap_name[1024] = {0};
+    char path[1024] = {0};
 
-    memcpy(pcap_name, s_pcap_name.c_str(), strlen(s_pcap_name.c_str()));
+    memcpy(path, s_path.c_str(), strlen(s_path.c_str()));
+    memcpy(pcap_name, path, strlen(path));
+    strncat(pcap_name, ".pcap", 5);
 
     pcap_t *handle = pcap_open_offline(pcap_name, errbuf);
 
@@ -102,6 +108,11 @@ void analysis_pcap(string &s_pcap_name)
         struct pcap_pkthdr *header;
         const uint8_t *packet;
         int res = pcap_next_ex(handle, &header, &packet);
+
+        // time_t a = header->ts.tv_sec;
+        // time_t b = header->ts.tv_usec;
+
+        // printf("%lu %lu\n", a, b);
 
         if (res == 0)
             continue;
@@ -143,10 +154,25 @@ void analysis_pcap(string &s_pcap_name)
         int res = pcap_next_ex(handle, &header, &packet);
         cnt++;
 
+        struct tm *ltime;
+        char timestr[16];
+        time_t local_tv_sec;
+        char buf[1024] = {
+            0,
+        };
+
         if (res == 0)
             continue;
         if (res == -1 || res == -2)
             break;
+
+        /* convert the timestamp to readable format */
+        local_tv_sec = header->ts.tv_sec;
+        ltime = localtime(&local_tv_sec);
+        strftime(timestr, sizeof(timestr), "%H:%M:%S", ltime);
+
+        sprintf(buf, "%s", timestr);
+        string capture_time(buf);
 
         struct ether_header *eth = (struct ether_header *)(packet);
 
@@ -172,7 +198,7 @@ void analysis_pcap(string &s_pcap_name)
             map_info[key].cnt = 1;
             char *t1 = inet_ntoa(*(struct in_addr *)(&key));
             char *t2 = get_isp(t1);
-
+            map_info[key].timestamp.push_back(capture_time);
             if (t2 == NULL)
             {
                 memcpy(map_info[key].isp, "NULL", 5);
@@ -185,15 +211,29 @@ void analysis_pcap(string &s_pcap_name)
         else
         {
             map_info[key].cnt++;
+            map_info[key].timestamp.push_back(capture_time);
         }
     }
 
-    char *file_name = (char *)malloc(sizeof(char) * strlen(pcap_name) + 1);
-    memcpy(file_name, pcap_name, strlen(pcap_name));
+    char file_name[1024] = {0};
 
-    strtok(file_name, ".");
+    memcpy(file_name, path, strlen(path));
+    strncat(file_name, "/", 1);
+
+    char *student_id;
+
+    char path_temp[1024] = {0};
+    
+    memcpy(path_temp, path, strlen(path));
+    
+    strtok(path_temp, "/");
+
+    student_id = strtok(NULL, "/");
+    student_id = strtok(NULL, "/");
+
+    strncat(file_name, student_id, strlen(student_id));
+
     strncat(file_name, ".csv", 4);
-    file_name[strlen(file_name)] = '\0';
 
     FILE *f = NULL;
 
@@ -207,11 +247,43 @@ void analysis_pcap(string &s_pcap_name)
                 it->second.isp, it->second.cnt);
     }
 
-    pcap_close(handle);
+    fclose(f);
+
+    for (map<uint32_t, info>::iterator it = map_info.begin(); it != map_info.end(); it++)
+    {
+        char ip_name[1024] = {0};
+        char ip_str[1024] = {0};
+        sprintf(ip_str, "%s", inet_ntoa(*(struct in_addr *)(&it->first)));
+
+    
+        memcpy(ip_name, path, strlen(path));
+        strncat(ip_name,"/",1);
+        strncat(ip_name, ip_str, strlen(ip_str));
+        strncat(ip_name, ".csv", 4);
+
+    //    it->second.timestamp.erase(unique(it->second.timestamp.begin(), it->second.timestamp.end()),it->second.timestamp.end());
+
+        
+        FILE *f = NULL;
+
+        f = fopen(ip_name, "w");
+
+        fprintf(f, "timestamp\n");
+
+
+        for (std::vector<std::string>::iterator i = it->second.timestamp.begin(); i != it->second.timestamp.end(); i++)
+        {
+            fprintf(f, "%s\n", (*i).c_str());
+        }
+
+        fclose(f);
+    }
 
     fclose(f);
 
-    printf("%s Finish\n", pcap_name);
+    pcap_close(handle);
+
+    printf("%s Finish\n", path);
 }
 
 int main(int argc, char *argv[])
@@ -251,10 +323,22 @@ int main(int argc, char *argv[])
 
     for (iter = v.begin(); iter != v.end(); iter++)
     {
-        string pcap_name(path);
-        pcap_name += "/";
-        pcap_name += *iter;
-        analysis_pcap(pcap_name);
+        string s_path(path);
+        s_path += "/";
+        s_path += *iter;
+
+        int len = s_path.size();
+        s_path = s_path.substr(0, len - 5);
+
+        char stu_path[1024] = {
+            0,
+        };
+
+        memcpy(stu_path, s_path.c_str(), strlen(s_path.c_str()));
+
+        mkdir(stu_path, 755);
+
+        analysis_pcap(s_path);
     }
 
     return 0;
