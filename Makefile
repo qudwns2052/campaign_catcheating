@@ -1,7 +1,7 @@
 all: pcap
 CC = g++
 
-pcap: pcap.cpp
+pcap: pcap2.cpp
 	$(CC) -o $@ $< -lpcap
 
 

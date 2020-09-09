@@ -12,6 +12,7 @@
 #include <dirent.h>
 #include <vector>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #define BUF_SIZE 1024
 
@@ -74,6 +75,15 @@ char *get_isp(char *ip)
     char *result = (char *)malloc(sizeof(char) * strlen(isp) + 1);
 
     memcpy(result, isp, strlen(isp) + 1);
+
+
+    for(int i=0; i<strlen(result); i++)
+    {
+        if(result[i] == ',')
+        {
+            result[i] = ' ';
+        }
+    }
 
     return result;
 }
@@ -140,12 +150,16 @@ void analysis_pcap(string &s_path)
             continue;
     }
 
+
+
     char ip_str[BUF_SIZE] = {0};
     int cnt = 0;
 
     uint32_t key;
 
     map<uint32_t, info> map_info;
+
+    int api_cnt = 0;
 
     while (1)
     {
@@ -198,6 +212,8 @@ void analysis_pcap(string &s_path)
             map_info[key].cnt = 1;
             char *t1 = inet_ntoa(*(struct in_addr *)(&key));
             char *t2 = get_isp(t1);
+            api_cnt++;
+
             map_info[key].timestamp.push_back(capture_time);
             if (t2 == NULL)
             {
@@ -212,6 +228,14 @@ void analysis_pcap(string &s_path)
         {
             map_info[key].cnt++;
             map_info[key].timestamp.push_back(capture_time);
+        }
+
+        if(api_cnt >= 45)
+        {
+            printf("sleep 60 ...\n");
+            sleep(60);
+
+            api_cnt = 0;
         }
     }
 
